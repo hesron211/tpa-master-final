@@ -1,143 +1,153 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BookOpen, Clock, ArrowRight, Library, Loader2, User, LogOut } from "lucide-react";
 import { createClient } from "../lib/supabase";
 import { Course } from "../types";
-import { useRouter } from "next/navigation";
+import { LogOut, BookOpen, Clock, BarChart3, ChevronRight, PlayCircle, Loader2 } from "lucide-react";
+import BrandLogo from "../components/BrandLogo"; 
 
-export default function Home() {
+export default function Dashboard() {
   const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
-    const fetchData = async () => {
+    const init = async () => {
       const supabase = createClient();
-      
-      // 1. Cek User Login
       const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
 
-      // 2. Ambil Kursus
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+      setUserEmail(user.email || "");
+
       const { data } = await supabase.from('courses').select('*').order('id');
       if (data) setCourses(data);
       
       setLoading(false);
     };
-    fetchData();
-  }, []);
+    init();
+  }, [router]);
 
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    setUser(null);
-    router.refresh();
+    router.push("/login");
   };
 
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
+        <Loader2 className="animate-spin text-brand-blue" size={40} />
+        <p className="text-slate-500 font-medium font-heading animate-pulse">Memuat Kelas Fokus...</p>
+    </div>
+  );
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Navbar */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
-        <div className="font-bold text-xl text-blue-600 flex items-center gap-2">
-          <BookOpen className="w-6 h-6" />
-          E-Learning TPA/TBI
-        </div>
-        
-        {/* Logic Tombol Login/Logout */}
-        {loading ? (
-          <div className="w-20 h-8 bg-slate-100 animate-pulse rounded"></div>
-        ) : user ? (
-          <div className="flex items-center gap-4">
-            <Link href="/profile" className="flex items-center gap-2 group cursor-pointer">
-              <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition">
-                <User size={16} />
-              </div>
-              <span className="text-sm font-medium text-slate-700 group-hover:text-blue-600 hidden md:block transition">
-                Halo, {user.email?.split('@')[0]}
-              </span>
-            </Link>
-          </div>
-        ) : (
-          <Link href="/login" className="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-full hover:bg-blue-700 transition shadow-lg shadow-blue-200">
-            Masuk Akun
-          </Link>
-        )}
-      </nav>
+    <div className="min-h-screen bg-slate-50 font-sans">
+      
+      {/* HEADER BARU */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-20">
+        <div className="max-w-5xl mx-auto px-4 h-20 flex justify-between items-center">
+          {/* Panggil Logo Disini */}
+          <BrandLogo />
 
-      {/* Hero Section */}
-      <section className="px-6 py-12 md:py-20 text-center bg-blue-600 text-white relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-        
-        <div className="relative z-10">
-          <h1 className="text-3xl md:text-5xl font-extrabold mb-4 tracking-tight">
-            Siapkan Dirimu Menembus Batas
-          </h1>
-          <p className="text-blue-100 max-w-2xl mx-auto text-lg mb-8 leading-relaxed">
-            Platform belajar mandiri dengan materi video, modul lengkap, dan simulasi CAT (Computer Assisted Test) sesuai standar terbaru.
-          </p>
-          {!user && (
-             <Link href="/login" className="inline-block bg-white text-blue-600 px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl transition hover:scale-105">
-               Daftar Gratis Sekarang
-             </Link>
-          )}
-        </div>
-      </section>
-
-      {/* Daftar Kursus */}
-      <section className="max-w-6xl mx-auto px-6 py-16 -mt-10 relative z-10">
-        <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100">
-          <div className="flex items-center gap-3 mb-8">
-            <Library className="w-6 h-6 text-blue-600" />
-            <h2 className="text-2xl font-bold text-slate-800">Pilih Materi Belajar</h2>
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-blue-600" /></div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {courses.map((course) => (
-                <div key={course.id} className="group relative bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:border-blue-300 transition-all flex flex-col">
-                  <div className="mb-4">
-                    <h3 className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                      {course.title}
-                    </h3>
-                    <div className="flex gap-4 mt-3 text-sm text-slate-500">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {course.duration_minutes} Menit
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <BookOpen className="w-4 h-4" />
-                        {course.question_count} Soal
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-auto pt-4 border-t border-slate-100 flex gap-2">
-                    {/* BAGIAN INI YANG SUDAH DIPERBAIKI (Jadi Link ke /learn) */}
-                    <Link 
-                      href={`/learn/${course.id}`}
-                      className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 transition text-center flex items-center justify-center"
-                    >
-                      Materi
-                    </Link>
-                    
-                    <Link 
-                      href={user ? `/exam/${course.id}` : "/login"} 
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
-                    >
-                      Ujian CAT <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  </div>
-                </div>
-              ))}
+          {/* User Info & Logout */}
+          <div className="flex items-center gap-3 md:gap-6">
+            <div className="hidden md:flex flex-col items-end">
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Student</span>
+                <span className="text-sm font-bold text-slate-800">{userEmail.split('@')[0]}</span>
             </div>
-          )}
+            <div className="h-8 w-[1px] bg-slate-200 hidden md:block"></div>
+            <button 
+              onClick={handleLogout} 
+              className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all font-bold text-sm"
+            >
+              <LogOut size={18} />
+              <span className="hidden md:inline">Keluar</span>
+            </button>
+          </div>
         </div>
-      </section>
-    </main>
+      </header>
+
+      {/* KONTEN UTAMA */}
+      <main className="max-w-5xl mx-auto px-4 py-10">
+        
+        {/* Banner Selamat Datang */}
+        <div className="bg-gradient-to-br from-brand-blue to-brand-dark rounded-3xl p-8 md:p-12 text-white shadow-xl shadow-blue-200/50 mb-12 overflow-hidden relative">
+            <div className="relative z-10 max-w-2xl">
+                <h1 className="text-3xl md:text-4xl font-bold mb-4 font-heading leading-tight">
+                    Siap Taklukkan TPA?
+                </h1>
+                <p className="text-blue-100 text-lg mb-8 leading-relaxed opacity-90">
+                    Konsistensi adalah kunci. Pilih modul di bawah dan mulai fokus belajar hari ini.
+                </p>
+                <div className="flex flex-wrap gap-4">
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2">
+                        <BookOpen size={18} className="text-brand-accent"/> {courses.length} Modul Tersedia
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2">
+                        <BarChart3 size={18} className="text-brand-accent"/> Progress Tracker
+                    </div>
+                </div>
+            </div>
+            {/* Hiasan background abstrak */}
+            <div className="absolute -right-20 -top-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
+            <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-brand-accent/20 rounded-full blur-3xl"></div>
+        </div>
+
+        {/* Grid Modul Belajar */}
+        <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-bold text-slate-800 font-heading flex items-center gap-3">
+                <div className="p-2 bg-brand-accent/10 rounded-lg text-brand-accent">
+                    <PlayCircle size={24}/> 
+                </div>
+                Daftar Modul
+            </h2>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {courses.map((course) => (
+            <Link 
+              key={course.id} 
+              href={`/exam/${course.id}`}
+              className="group bg-white rounded-2xl p-6 border border-slate-200 hover:border-brand-blue hover:shadow-xl hover:shadow-blue-100/50 transition-all duration-300 relative overflow-hidden flex flex-col h-full"
+            >
+              <div className="flex justify-between items-start mb-6">
+                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-brand-blue group-hover:bg-brand-blue group-hover:text-white transition-colors duration-300 shadow-sm">
+                    <BookOpen size={28} />
+                </div>
+                <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 uppercase tracking-wide">
+                    <Clock size={12}/> {course.duration_minutes} Menit
+                </span>
+              </div>
+              
+              <h3 className="text-xl font-bold text-slate-800 mb-3 font-heading group-hover:text-brand-blue transition-colors">
+                {course.title}
+              </h3>
+              <p className="text-sm text-slate-500 mb-8 line-clamp-2 leading-relaxed">
+                Latihan intensif dan pembahasan lengkap untuk materi {course.title}.
+              </p>
+
+              <div className="mt-auto pt-6 border-t border-slate-100 flex items-center justify-between text-brand-blue font-bold group-hover:translate-x-1 transition-transform">
+                <span className="text-sm">Mulai Belajar</span>
+                <ChevronRight size={18} />
+              </div>
+            </Link>
+          ))}
+        </div>
+        
+        {/* Footer */}
+        <div className="mt-20 text-center">
+            <p className="text-slate-400 text-sm font-medium">
+                &copy; {new Date().getFullYear()} <span className="text-slate-600 font-bold">KelasFokus</span>. Learning Platform.
+            </p>
+        </div>
+
+      </main>
+    </div>
   );
 }
