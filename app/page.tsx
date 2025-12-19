@@ -2,36 +2,113 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "../lib/supabase";
-import { Course } from "../types";
-import { LogOut, BookOpen, Clock, ChevronRight, PlayCircle, Loader2, GraduationCap } from "lucide-react";
-import BrandLogo from "../components/BrandLogo";
+import { 
+  LogOut, 
+  BookOpen, 
+  Clock, 
+  PlayCircle, 
+  Loader2, 
+  FileText, 
+  HelpCircle 
+} from "lucide-react";
+import Link from "next/link";
+
+// --- DEFINISI TIPE DATA LOKAL ---
+// Kita taruh sini agar tidak error saat build jika file types global belum update
+interface Course {
+  id: number;
+  title: string;
+  slug: string;
+  image_url: string | null;
+  category?: string; // Tanda tanya (?) berarti opsional, menghindari error
+  created_at?: string;
+}
+
+// --- KAMUS ATURAN DURASI UJIAN (HARDCODED) ---
+// Sistem akan mencocokkan Judul Mapel dengan aturan ini.
+const EXAM_RULES: Record<string, number> = {
+  "TPA Verbal": 40,
+  "TPA Numerikal": 40,
+  "TPA Figural": 35,
+  "TBI Structure": 25,
+  "TBI Reading": 35,
+};
+
+// Durasi Default jika nama mapel tidak ada di daftar
+const DEFAULT_DURATION = 30; 
 
 export default function Dashboard() {
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState("");
+  
+  // State untuk menyimpan statistik per Mapel
+  const [stats, setStats] = useState<Record<number, { 
+    matCount: number, 
+    vidCount: number, 
+    qCount: number 
+  }>>({});
+
+  const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=800&q=80";
 
   useEffect(() => {
     const init = async () => {
       const supabase = createClient();
+      
+      // 1. Cek User
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push("/login"); return; }
+      
+      setUser({ ...user, full_name: user.user_metadata?.full_name || "Siswa" });
 
-      if (!user) {
-        router.push("/login");
-        return;
+      // 2. Ambil Mapel
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select('*')
+        .order('id');
+      
+      if (coursesData) {
+        setCourses(coursesData);
       }
-      setUserEmail(user.email || "");
 
-      const { data } = await supabase.from('courses').select('*').order('id');
-      if (data) setCourses(data);
+      // 3. HITUNG STATISTIK (Materi, Video, Soal)
+      // Kita ambil semua data ID dan course_id saja (ringan) untuk dihitung di JS
+      const { data: allMats } = await supabase.from('materials').select('course_id, video_url');
+      const { data: allQs } = await supabase.from('questions').select('course_id');
+
+      // Proses Hitung
+      const newStats: any = {};
+      
+      if (coursesData) {
+        coursesData.forEach((c: Course) => {
+            // Filter materi milik mapel ini
+            const cMats = allMats?.filter((m: any) => m.course_id === c.id) || [];
+            // Filter soal milik mapel ini
+            const cQs = allQs?.filter((q: any) => q.course_id === c.id) || [];
+
+            newStats[c.id] = {
+                matCount: cMats.length, // Total Materi
+                vidCount: cMats.filter((m:any) => m.video_url).length, // Total yang ada videonya
+                qCount: cQs.length // Total Soal Aktual di Database
+            };
+        });
+      }
+      setStats(newStats);
       
       setLoading(false);
     };
+
     init();
   }, [router]);
+
+  // Fungsi Helper untuk Mendapatkan Durasi Ujian
+  const getExamDuration = (title: string) => {
+    // Cari apakah judul mapel mengandung kata kunci dari aturan
+    const key = Object.keys(EXAM_RULES).find(k => title.includes(k));
+    return key ? EXAM_RULES[key] : DEFAULT_DURATION;
+  };
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -39,96 +116,130 @@ export default function Dashboard() {
     router.push("/login");
   };
 
-  if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
-        <Loader2 className="animate-spin text-brand-blue" size={40} />
-        <p className="text-slate-500 font-medium font-heading animate-pulse">Memuat Kelas Fokus...</p>
-    </div>
-  );
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-brand-blue" size={40} /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
       
       {/* HEADER */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 h-20 flex justify-between items-center">
-          <BrandLogo />
-          <div className="flex items-center gap-3 md:gap-6">
-            <div className="hidden md:flex flex-col items-end">
-                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Student</span>
-                <span className="text-sm font-bold text-slate-800">{userEmail.split('@')[0]}</span>
-            </div>
-            <div className="h-8 w-[1px] bg-slate-200 hidden md:block"></div>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all font-bold text-sm">
-              <LogOut size={18} /><span className="hidden md:inline">Keluar</span>
-            </button>
+      <header className="bg-white border-b sticky top-0 z-10 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="bg-brand-blue text-white p-1.5 rounded-lg font-bold text-xl font-heading shadow-md">K</div>
+            <span className="font-heading font-bold text-slate-800 text-lg hidden md:block">KelasFokus</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/profile" className="flex items-center gap-3 hover:bg-slate-100 p-2 rounded-xl transition-all group cursor-pointer">
+                <div className="text-right hidden md:block">
+                    <p className="text-sm font-bold text-slate-700 group-hover:text-brand-blue transition-colors">{user?.full_name}</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Kelola Akun</p>
+                </div>
+                <div className="w-10 h-10 bg-brand-blue text-white rounded-full flex items-center justify-center font-bold text-lg shadow-md ring-2 ring-white group-hover:ring-blue-100 transition-all">
+                    {user?.email?.charAt(0).toUpperCase()}
+                </div>
+            </Link>
+            <button onClick={handleLogout} className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><LogOut size={20} /></button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-10">
+      {/* KONTEN UTAMA */}
+      <main className="max-w-5xl mx-auto p-4 md:p-8 space-y-8">
         
-        {/* BANNER */}
-        <div className="bg-gradient-to-br from-brand-blue to-brand-dark rounded-3xl p-8 md:p-12 text-white shadow-xl shadow-blue-200/50 mb-12 overflow-hidden relative">
-            <div className="relative z-10 max-w-2xl">
-                <h1 className="text-3xl md:text-4xl font-bold mb-4 font-heading leading-tight">Siap Taklukkan TPA?</h1>
-                <p className="text-blue-100 text-lg mb-8 leading-relaxed opacity-90">Konsistensi adalah kunci. Pilih modul di bawah dan mulai fokus belajar hari ini.</p>
-                <div className="flex flex-wrap gap-4">
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2"><BookOpen size={18} className="text-brand-accent"/> {courses.length} Modul Tersedia</div>
-                </div>
+        {/* Banner */}
+        <div className="bg-gradient-to-r from-brand-blue to-brand-dark rounded-3xl p-6 md:p-10 text-white shadow-xl shadow-blue-200 relative overflow-hidden">
+            <div className="relative z-10">
+                <h1 className="text-2xl md:text-4xl font-bold font-heading mb-2">Halo, {user?.full_name}! 👋</h1>
+                <p className="text-blue-100 text-sm md:text-base max-w-lg">
+                    Siap untuk belajar hari ini? Pilih materi di bawah dan mulai tingkatkan skor TPA Anda.
+                </p>
             </div>
-            <div className="absolute -right-20 -top-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
+            <div className="absolute right-0 top-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
         </div>
 
-        {/* LIST MODUL */}
-        <h2 className="text-2xl font-bold text-slate-800 font-heading mb-6 flex items-center gap-3">
-            <div className="p-2 bg-brand-accent/10 rounded-lg text-brand-accent"><GraduationCap size={24}/></div>
-            Daftar Modul Belajar
-        </h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((course) => (
-            <div key={course.id} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-xl hover:shadow-blue-100/50 transition-all duration-300 flex flex-col h-full">
-              
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-brand-blue">
-                    <BookOpen size={24} />
-                </div>
-                <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                    <Clock size={12}/> {course.duration_minutes}m
-                </span>
-              </div>
-              
-              <h3 className="text-lg font-bold text-slate-800 mb-2 font-heading">{course.title}</h3>
-              <p className="text-sm text-slate-500 mb-6 line-clamp-2 flex-1">
-                Akses materi video dan latihan soal intensif untuk {course.title}.
-              </p>
+        {/* Daftar Mapel */}
+        <div>
+            <h2 className="text-xl font-bold text-slate-800 mb-6 font-heading flex items-center gap-2">
+                <BookOpen className="text-brand-accent"/> Materi Pelajaran
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {courses.length === 0 ? (
+                    <div className="col-span-full text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">
+                        Belum ada materi pelajaran yang tersedia.
+                    </div>
+                ) : (
+                    courses.map((course) => {
+                        const s = stats[course.id] || { matCount: 0, vidCount: 0, qCount: 0 };
+                        const duration = getExamDuration(course.title); // Ambil Durasi Sesuai Aturan
 
-              {/* DUA TOMBOL AKSI */}
-              <div className="grid grid-cols-2 gap-3 mt-auto">
-                 {/* 1. Tombol Belajar Materi */}
-                 <Link 
-                    href={`/learn/${course.id}`}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:text-brand-blue transition-colors"
-                 >
-                    <PlayCircle size={16}/> Materi
-                 </Link>
+                        return (
+                            <div key={course.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full group">
+                                
+                                {/* Gambar Thumbnail */}
+                                <div className="h-40 bg-slate-200 relative overflow-hidden">
+                                    <img 
+                                        src={course.image_url ? course.image_url : DEFAULT_IMAGE} 
+                                        onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_IMAGE; }}
+                                        alt={course.title} 
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                    <span className="absolute bottom-3 left-3 text-white text-xs font-bold px-2 py-1 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                                        {/* INI YANG SEBELUMNYA ERROR, SEKARANG AMAN */}
+                                        {course.category || "Umum"}
+                                    </span>
+                                </div>
 
-                 {/* 2. Tombol Ujian */}
-                 <Link 
-                    href={`/exam/${course.id}`}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-lg bg-brand-blue text-white font-bold text-sm hover:bg-brand-dark transition-colors shadow-lg shadow-blue-200"
-                 >
-                    Ujian <ChevronRight size={16}/>
-                 </Link>
-              </div>
+                                <div className="p-5 flex-1 flex flex-col">
+                                    <h3 className="font-bold text-lg text-slate-800 mb-2 font-heading line-clamp-1" title={course.title}>
+                                        {course.title}
+                                    </h3>
+                                    
+                                    {/* --- INFORMASI STATISTIK CARD --- */}
+                                    <div className="flex-1 space-y-3 mb-6">
+                                        
+                                        {/* Baris 1: Statistik Materi */}
+                                        <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                            <div className="flex items-center gap-1">
+                                                <FileText size={14} className="text-brand-blue"/> 
+                                                <span className="font-bold text-slate-700">{s.matCount}</span> Materi
+                                            </div>
+                                            <span className="text-slate-300">|</span>
+                                            <div className="flex items-center gap-1">
+                                                <PlayCircle size={14} className="text-red-500"/> 
+                                                <span className="font-bold text-slate-700">{s.vidCount}</span> Video
+                                            </div>
+                                        </div>
 
+                                        {/* Baris 2: Statistik Ujian */}
+                                        <div className="flex items-center justify-between text-xs text-slate-500 bg-orange-50 p-2 rounded-lg border border-orange-100">
+                                            <div className="flex items-center gap-1 text-orange-700 font-bold">
+                                                <HelpCircle size={14}/> {s.qCount} Soal
+                                            </div>
+                                            <div className="flex items-center gap-1 text-orange-700 font-bold">
+                                                <Clock size={14}/> {duration} Menit
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    {/* Tombol Aksi */}
+                                    <div className="flex gap-2 mt-auto">
+                                        <Link href={`/learn/${course.id}`} className="flex-1 text-center py-2.5 bg-brand-blue text-white rounded-xl font-bold text-xs md:text-sm hover:bg-brand-dark transition-colors shadow-lg shadow-blue-100 flex items-center justify-center gap-1">
+                                            <BookOpen size={16}/> Materi
+                                        </Link>
+                                        <Link href={`/exam/${course.id}`} className="flex-1 text-center py-2.5 bg-white text-brand-blue border border-brand-blue rounded-xl font-bold text-xs md:text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-1">
+                                            <Clock size={16}/> Ujian
+                                        </Link>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
-          ))}
         </div>
-        
-        <div className="mt-20 text-center"><p className="text-slate-400 text-sm font-medium">&copy; {new Date().getFullYear()} <span className="text-slate-600 font-bold">KelasFokus</span>. Learning Platform.</p></div>
-
       </main>
     </div>
   );

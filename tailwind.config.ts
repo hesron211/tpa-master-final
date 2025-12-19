@@ -9,20 +9,21 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // Menggabungkan font Google dengan font bawaan
         sans: ["var(--font-inter)", "sans-serif"], 
         heading: ["var(--font-poppins)", "sans-serif"],
       },
       colors: {
-        // Warna Brand Baru
         brand: {
-          blue: "#2563EB", // Biru Utama (Royal Blue)
-          dark: "#1E40AF", // Biru Gelap
-          accent: "#F59E0B", // Orange/Emas
+          blue: "#2563EB", 
+          dark: "#1E40AF", 
+          accent: "#F59E0B", 
         }
       }
     },
   },
-  plugins: [],
+  // BAGIAN INI YANG PENTING:
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 };
 export default config;
