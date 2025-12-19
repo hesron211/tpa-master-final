@@ -18,7 +18,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   // GANTI LINK LYNK.ID ANDA
-  const LYNK_ID_URL = "https://lynk.id/username_anda";
+  const LYNK_ID_URL = "https://lynk.id/kelasfokus";
 
   useEffect(() => {
     const init = async () => {
